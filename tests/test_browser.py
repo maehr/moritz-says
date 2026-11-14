@@ -112,6 +112,12 @@ def test_search_end_to_end(context: BrowserContext, site: str) -> None:
     start = " ".join(expected.text.split())[:80]
     assert any(start in text for text in texts), texts
 
+    nav = page.locator("header.site-header")
+    nav.get_by_role("link", name="About", exact=True).click()
+    page.get_by_role("heading", name="About me").wait_for(timeout=LOAD_TIMEOUT)
+    nav.get_by_role("link", name="Search", exact=True).click()
+    page.locator("section.work").first.wait_for(timeout=LOAD_TIMEOUT)
+
     assert not errors
     assert all(is_allowed(host) for host in hosts), sorted(hosts)
     page.close()
@@ -197,19 +203,36 @@ def test_model_failure_shows_retry(context: BrowserContext, site: str) -> None:
     fresh.close()
 
 
-def test_page_explains_the_author_and_the_search(context: BrowserContext, site: str) -> None:
-    """The page shows the About section, the diagram, and the list of works."""
+def test_routes_show_one_page_each(context: BrowserContext, site: str) -> None:
+    """The landing page holds the search. Each other page loads by its link and by its URL."""
     hosts: set[str] = set()
     errors: list[str] = []
     page = open_page(context, hosts, errors)
+    nav = page.locator("header.site-header")
+
     page.goto(site)
+    page.get_by_role("textbox").wait_for(timeout=LOAD_TIMEOUT)
+    assert page.get_by_role("heading", name="About me").count() == 0
+    assert page.locator("svg[aria-roledescription]").count() == 0
+    assert page.locator("ul.works").count() == 0
+
+    nav.get_by_role("link", name="About", exact=True).click()
     page.get_by_role("heading", name="About me").wait_for(timeout=LOAD_TIMEOUT)
     assert page.get_by_role("img", name="Portrait of Moritz Mähr").is_visible()
-    page.get_by_role("heading", name="How it works").wait_for(timeout=LOAD_TIMEOUT)
-    page.locator("svg[aria-roledescription='flowchart-v2']").wait_for(timeout=LOAD_TIMEOUT)
+    assert page.get_by_role("textbox").count() == 0
+
+    nav.get_by_role("link", name="Works", exact=True).click()
     works = page.locator("ul.works li")
     works.first.wait_for(timeout=LOAD_TIMEOUT)
     assert works.count() == len({chunk.source for chunk in INDEX.chunks})
+
+    page.goto(site + "#/how-it-works")
+    page.reload()
+    page.get_by_role("heading", name="How it works").wait_for(timeout=LOAD_TIMEOUT)
+    page.locator("svg[aria-roledescription='flowchart-v2']").wait_for(timeout=LOAD_TIMEOUT)
+
+    nav.get_by_role("link", name="Search", exact=True).click()
+    page.get_by_role("textbox").wait_for(timeout=LOAD_TIMEOUT)
     assert not errors
     assert all(is_allowed(host) for host in hosts), sorted(hosts)
     page.close()

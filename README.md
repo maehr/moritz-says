@@ -35,24 +35,22 @@ flowchart TB
   C --> D
 ```
 
-```mermaid
-flowchart TB
-  accTitle: How the search works
-  accDescr: At build time, a script turns the texts into passages with embeddings. In the browser, the page loads them, embeds your query, ranks the passages, and shows the best ones.
-  subgraph build["Build time, on the author's computer"]
-    A["content/*.md"] --> B["build_index.py"] --> C["public/embeddings.json"]
-  end
-  subgraph browser["In your browser: your query never leaves your device"]
-    D["Load and check the index"] --> E["Embed your query<br/>Transformers.js, ONNX"] --> F["Rank the passages<br/>Python, dot product"] --> G["Show the best passages"]
-  end
-  C --> D
-```
-
 The query does not leave the browser. No inference service gets the query or a text.
 
 The browser downloads the runtime, the Python packages, and the model files from these hosts:
 `cdn.jsdelivr.net`, `files.pythonhosted.org`, `pypi.org`, `wasm.marimo.app`, and `huggingface.co` with its file hosts.
 The first visit needs a network connection. The first search downloads a model of about 120 MB.
+
+## Pages
+
+The page has four views. The header links to each view.
+
+| View | URL | Content |
+| --- | --- | --- |
+| Search | `#/` | The search field and the results. |
+| Works | `#/works` | The works in the index, with links. |
+| How it works | `#/how-it-works` | The explanation and the diagram. |
+| About | `#/about` | The author. |
 
 ## Models
 

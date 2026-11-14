@@ -140,6 +140,8 @@ Document changes require re-running the index generator and committing the updat
 8. Sort by descending score, breaking ties by chunk ID. Group the passages by work. Show the work of the best passage first, at most five works, and at most five passages for each work.
 9. Render source titles and text safely as plain text, and provide clickable source URLs when present. Label similarity as a ranking score, not a probability.
 
+**Pages.** The page uses hash routes with a navigation menu in the header. `#/` (and an empty hash) shows the title, the search field, and the results. `#/works` lists the searchable works. `#/how-it-works` explains the search with a diagram. `#/about` introduces the author. The results stay when the visitor changes the page.
+
 **Edge cases:** Blank or whitespace-only queries do not invoke the model. A missing/empty index shows a message. If model download or inference fails, show an error with a retry option. Repeated searches reuse the model instance. Disable duplicate submissions while a query runs.
 
 **Implementation boundary:** Keep the marimo application and ranking in Python. Limit JavaScript to model initialization/inference and conversion of the resulting vector. The JS module bridge must be verified in the exported WASM page, not only in a normal local Python process.

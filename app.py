@@ -360,14 +360,18 @@ def render_corpus(index: SearchIndex) -> str:
 
 @app.cell
 def _():
-    mo.Html("""
+    _nav = mo.nav_menu(
+        {
+            "#/": "Search",
+            "#/works": "Works",
+            "#/how-it-works": "How it works",
+            "#/about": "About",
+        }
+    )
+    mo.Html(f"""
     <header class="site-header">
-    <a class="wordmark" href="https://moritzmaehr.ch/">Moritz Mähr</a>
-    <nav aria-label="Main navigation">
-    <a href="https://moritzmaehr.ch/research/">Research</a>
-    <a href="https://moritzmaehr.ch/build/">Build</a>
-    <a href="https://moritzmaehr.ch/academic/">CV &amp; Publications</a>
-    </nav>
+    <a class="wordmark" href="#/">Moritz says</a>
+    <nav aria-label="Main navigation">{_nav.text}</nav>
     </header>
     """)
     return
@@ -375,7 +379,7 @@ def _():
 
 @app.cell
 def _():
-    mo.md("""
+    intro = mo.md("""
     <p class="eyebrow">History of computing · Digital history</p>
 
     # Moritz says
@@ -383,9 +387,8 @@ def _():
     Search the publications of Moritz Mähr by meaning. Write a question or a topic in German or English.
 
     The search runs in your browser. The first search downloads a language model of about 120 MB.
-    Your query stays on your device. The score is a ranking score, not a probability.
     """)
-    return
+    return (intro,)
 
 
 @app.cell
@@ -416,7 +419,7 @@ async def _():
 @app.cell
 def _(index, index_error):
     if index is None:
-        _status = mo.callout(
+        status = mo.callout(
             mo.Html(
                 "<strong>The search is not available.</strong> The search index did not load. "
                 + html.escape(index_error)
@@ -424,27 +427,26 @@ def _(index, index_error):
             kind="danger",
         )
     elif not index.chunks:
-        _status = mo.callout(mo.Html("The search index holds no passage."), kind="warn")
+        status = mo.callout(mo.Html("The search index holds no passage."), kind="warn")
     else:
         _works = len({chunk.source for chunk in index.chunks})
-        _status = mo.callout(
+        status = mo.callout(
             mo.Html(f"Ready. The index holds {len(index.chunks)} passages from {_works} works."),
             kind="success",
         )
-    _status
-    return
+    return (status,)
 
 
 @app.cell
 def _(index):
-    mo.stop(index is None or not index.chunks)
-    form = mo.ui.text(
-        label="Query",
-        placeholder="Wie veränderte der Computer die Verwaltung?",
-        full_width=True,
-    ).form(submit_button_label="Search", bordered=False)
+    form = None
     retry = mo.ui.run_button(label="Retry")
-    form
+    if index is not None and index.chunks:
+        form = mo.ui.text(
+            label="Query",
+            placeholder="Wie veränderte der Computer die Verwaltung?",
+            full_width=True,
+        ).form(submit_button_label="Search", bordered=False)
     return form, retry
 
 
@@ -458,51 +460,157 @@ def _():
 @app.cell
 async def _(form, index, retry, session):
     retry.value  # A click on Retry runs this cell again.
-    _query = (form.value or "").strip()
-    mo.stop(not _query, mo.md("Write a query. Then select **Search**."))
-    mo.stop(
-        not IS_WASM,
-        mo.callout(
+    results_view = mo.md("")
+    _query = (form.value or "").strip() if form is not None else ""
+    if form is None or index is None:
+        pass
+    elif not _query:
+        results_view = mo.md("Write a query. Then select **Search**.")
+    elif not IS_WASM:
+        results_view = mo.callout(
             mo.md(
                 "The query model runs only in the WebAssembly export. "
-                "Run `marimo export html-wasm app.py -o dist --mode run` and serve `dist/`."
+                "Run `uv run python -m scripts.export_site` and serve `dist/`."
             ),
             kind="warn",
-        ),
-    )
-    try:
-        if "embed" not in session:
-            with mo.status.spinner(
-                title="Loading the language model",
-                subtitle="The first search downloads about 120 MB.",
-            ):
-                from pyodide.code import run_js  # ty: ignore[import-not-found]
+        )
+    else:
+        try:
+            if "embed" not in session:
+                with mo.status.spinner(
+                    title="Loading the language model",
+                    subtitle="The first search downloads about 120 MB.",
+                ):
+                    from pyodide.code import run_js  # ty: ignore[import-not-found]
 
-                session["embed"] = await run_js(EMBEDDER_JS)(
-                    TRANSFORMERS_JS_URL,
-                    index.model.query_model,
-                    index.model.query_revision,
-                    QUERY_DTYPE,
-                )
-        with mo.status.spinner(title="Searching"):
-            _vector = (await session["embed"](index.model.query_prefix + _query)).to_py()
-            check_vector(_vector, index.model.dimensions)
-            _output = mo.Html(render_results(group_by_work(rank(_vector, index.chunks))))
-    except Exception as _exc:
-        _output = mo.vstack(
-            [
-                mo.callout(
-                    mo.Html(
-                        "<strong>The search failed.</strong> "
-                        "The language model did not load or did not run. "
-                        + html.escape(str(_exc) or type(_exc).__name__)
+                    session["embed"] = await run_js(EMBEDDER_JS)(
+                        TRANSFORMERS_JS_URL,
+                        index.model.query_model,
+                        index.model.query_revision,
+                        QUERY_DTYPE,
+                    )
+            with mo.status.spinner(title="Searching"):
+                _vector = (await session["embed"](index.model.query_prefix + _query)).to_py()
+                check_vector(_vector, index.model.dimensions)
+                results_view = mo.Html(render_results(group_by_work(rank(_vector, index.chunks))))
+        except Exception as _exc:
+            results_view = mo.vstack(
+                [
+                    mo.callout(
+                        mo.Html(
+                            "<strong>The search failed.</strong> "
+                            "The language model did not load or did not run. "
+                            + html.escape(str(_exc) or type(_exc).__name__)
+                        ),
+                        kind="danger",
                     ),
-                    kind="danger",
+                    retry,
+                ]
+            )
+    return (results_view,)
+
+
+@app.cell
+def _():
+    about = mo.Html("""
+    <section class="about" aria-labelledby="about-heading">
+    <img class="portrait" src="public/img/portrait-560.webp"
+      srcset="public/img/portrait-280.webp 280w, public/img/portrait-560.webp 560w"
+      sizes="(max-width: 30em) 12rem, 15rem" width="560" height="560" alt="Portrait of Moritz Mähr">
+    <div>
+    <h2 id="about-heading">About me</h2>
+    <p>I am a historian of technology. I study how computers change institutions and everyday life,
+    especially in Swiss public administration and migration governance. I am a Research Associate in
+    Digital History at the <a href="https://www.hist.unibe.ch/">Department of History</a> of the
+    <a href="https://www.unibe.ch/index_eng.html">University of Bern</a> and an Information and Library
+    Science Specialist with
+    <a href="https://ethz.ch/staffnet/en/organisation/departments/eth-library/research-support-services/research-analytics-service.html">Research Analytics Services</a>
+    at <a href="https://ethz.ch/en.html">ETH Zurich</a>, where I also earned my doctorate.
+    I teach digital history and critical AI literacy, and I build open tools for working with
+    historical sources.</p>
+    <p>More at <a href="https://moritzmaehr.ch/">moritzmaehr.ch</a>, including my
+    <a href="https://moritzmaehr.ch/academic/">CV and publications</a>.</p>
+    </div>
+    </section>
+    """)
+    return (about,)
+
+
+@app.cell
+def _():
+    how = mo.vstack(
+        [
+            mo.md("""
+    ## How it works
+
+    This search finds passages. It does not write answers, and it does not check facts.
+    Read each passage in the original work before you rely on it.
+
+    1. A script splits each text into short passages and turns each passage into numbers, an embedding.
+       It runs once, on my computer. The result is a public file.
+    2. Your browser loads that file. It also loads a small language model of about 120 MB.
+       Only the first search downloads the model.
+    3. The model turns your query into an embedding. This happens on your device. Your query is not sent anywhere.
+    4. Python compares your embedding with each passage. The best matches come first.
+       The score is a ranking score, not a probability.
+            """),
+            mo.mermaid(DIAGRAM, theme="base", theme_variables=DIAGRAM_THEME),
+            mo.md("""
+    **Text version of the diagram.** At build time, `build_index.py` reads `content/*.md` and writes
+    `public/embeddings.json`. In your browser, the page loads and checks that file, embeds your query with
+    Transformers.js, ranks the passages in Python by dot product, and shows the best passages.
+
+    The software is open source under AGPL-3.0-only. The code is on
+    [GitHub](https://github.com/maehr/moritz-says). All texts and embeddings are public.
+            """),
+        ]
+    )
+    return (how,)
+
+
+@app.cell
+def _(index):
+    if index is None or not index.chunks:
+        works = mo.md("## What you can search\n\nThe search index is not available.")
+    else:
+        works = mo.vstack(
+            [
+                mo.md(
+                    "## What you can search\n\nThese works are in the index. The links lead to the originals."
                 ),
-                retry,
+                mo.Html(render_corpus(index)),
             ]
         )
-    _output
+    return (works,)
+
+
+@app.cell
+def _(about, form, how, intro, results_view, status, works):
+    # The search page is the catch-all, so that an empty hash and "#/" both show it.
+    mo.routes(
+        {
+            "#/works": lambda: works,
+            "#/how-it-works": lambda: how,
+            "#/about": lambda: about,
+            mo.routes.CATCH_ALL: lambda: mo.vstack(
+                [intro, status, form if form is not None else mo.md(""), results_view]
+            ),
+        }
+    )
+    return
+
+
+@app.cell
+def _():
+    mo.Html("""
+    <footer class="site-footer">
+    <a href="https://moritzmaehr.ch/">Moritz Mähr</a>
+    <a href="https://moritzmaehr.ch/academic/">CV &amp; Publications</a>
+    <a href="https://orcid.org/0000-0002-1367-1618">ORCID</a>
+    <a href="https://github.com/maehr">GitHub</a>
+    <a href="https://github.com/maehr/moritz-says">Source code</a>
+    </footer>
+    """)
     return
 
 

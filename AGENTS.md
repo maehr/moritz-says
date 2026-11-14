@@ -30,7 +30,8 @@ Pin versions in `pyproject.toml`. Commit `uv.lock`. Install with `uv sync --lock
 * Use a dataclass for an internal carrier. Keep core logic in pure functions.
 * Put a runnable example in each docstring.
 * Require 100% coverage on core logic. Keep each exclusion narrow and explicit.
-* The browser gets only `app.py`. Put browser logic in a top-level function of `app.py`, not in a cell.
+* The browser gets `app.py`, `site.css`, `head.html`, and `public/`. Put browser logic in a top-level function of `app.py`, not in a cell.
+* Host every font and image in `public/`. Never link a third-party host.
 * Never edit `public/embeddings.json` or `tests/fixtures/reference_vectors.json` by hand. Run the index build.
 * Convert a PDF for `content/` with the `pdf2md` MCP server.
 
@@ -49,7 +50,7 @@ Other commands:
 
 ```bash
 uv run --group index python -m scripts.build_index          # Build the index and the fixture.
-uv run marimo export html-wasm app.py -o dist --mode run    # Export the site.
+uv run python -m scripts.export_site                        # Export the site to dist/.
 uv run pytest -m browser --no-cov                           # Browser tests. They need dist/ and a network.
 ```
 

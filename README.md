@@ -82,7 +82,7 @@ uv run marimo check app.py --select MW
 ## Local check
 
 ```bash
-uv run marimo export html-wasm app.py -o dist --mode run
+uv run python -m scripts.export_site
 python -m http.server --directory dist 8000
 ```
 
@@ -95,7 +95,7 @@ They need the export in `dist/` and a network connection. CI does not run them.
 Run them before each release:
 
 ```bash
-uv run marimo export html-wasm app.py -o dist --mode run
+uv run python -m scripts.export_site
 uv run playwright install chromium firefox
 uv run pytest -m browser --no-cov
 ```

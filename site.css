@@ -298,3 +298,10 @@ button[data-testid="marimo-plugin-form-submit-button"]:hover:not(:disabled) {
 .about p {
   margin: 0 0 1rem;
 }
+
+/* Header navigation. */
+.site-header nav,
+.site-header nav a {
+  font-family: var(--sans);
+  font-weight: 500;
+}

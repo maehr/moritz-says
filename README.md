@@ -41,6 +41,17 @@ The browser downloads the runtime, the Python packages, and the model files from
 `cdn.jsdelivr.net`, `files.pythonhosted.org`, `pypi.org`, `wasm.marimo.app`, and `huggingface.co` with its file hosts.
 The first visit needs a network connection. The first search downloads a model of about 120 MB.
 
+## Pages
+
+The page has four views. The header links to each view.
+
+| View | URL | Content |
+| --- | --- | --- |
+| Search | `#/` | The search field and the results. |
+| Works | `#/works` | The works in the index, with links. |
+| How it works | `#/how-it-works` | The explanation and the diagram. |
+| About | `#/about` | The author. |
+
 ## Models
 
 | Use | Model | Where to pin |

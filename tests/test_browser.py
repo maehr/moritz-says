@@ -96,7 +96,7 @@ def test_search_end_to_end(context: BrowserContext, site: str) -> None:
 
     reference = FIXTURE["reference"]
     search(page, reference["query"])
-    items = page.locator("ol li")
+    items = page.locator("ol.results li")
     items.first.wait_for(timeout=MODEL_TIMEOUT)
     texts = [" ".join(text.split()) for text in items.all_inner_texts()]
     assert 1 <= len(texts) <= 5
@@ -180,10 +180,28 @@ def test_model_failure_shows_retry(context: BrowserContext, site: str) -> None:
     page.get_by_text("Ready. The index holds").wait_for(timeout=LOAD_TIMEOUT)
     search(page, FIXTURE["reference"]["query"])
     page.get_by_text("The search failed.").wait_for(timeout=MODEL_TIMEOUT)
-    assert page.locator("ol li").count() == 0
+    assert page.locator("ol.results li").count() == 0
 
     page.unroute("https://huggingface.co/**", block)
     page.get_by_role("button", name="Retry").click()
-    page.locator("ol li").first.wait_for(timeout=MODEL_TIMEOUT)
+    page.locator("ol.results li").first.wait_for(timeout=MODEL_TIMEOUT)
     assert not errors
     fresh.close()
+
+
+def test_page_explains_the_author_and_the_search(context: BrowserContext, site: str) -> None:
+    """The page shows the About section, the diagram, and the list of works."""
+    hosts: set[str] = set()
+    errors: list[str] = []
+    page = open_page(context, hosts, errors)
+    page.goto(site)
+    page.get_by_role("heading", name="About me").wait_for(timeout=LOAD_TIMEOUT)
+    assert page.get_by_role("img", name="Portrait of Moritz Mähr").is_visible()
+    page.get_by_role("heading", name="How it works").wait_for(timeout=LOAD_TIMEOUT)
+    page.locator("svg[aria-roledescription='flowchart-v2']").wait_for(timeout=LOAD_TIMEOUT)
+    works = page.locator("ul.works li")
+    works.first.wait_for(timeout=LOAD_TIMEOUT)
+    assert works.count() == len({chunk.source for chunk in INDEX.chunks})
+    assert not errors
+    assert all(is_allowed(host) for host in hosts), sorted(hosts)
+    page.close()

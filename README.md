@@ -22,6 +22,19 @@ Do not add confidential or access-restricted text.
 6. A pinned ONNX model calculates the query embedding in the browser.
 7. Python ranks the passages by dot product and shows the best five.
 
+```mermaid
+flowchart TB
+  accTitle: How the search works
+  accDescr: At build time, a script turns the texts into passages with embeddings. In the browser, the page loads them, embeds your query, ranks the passages, and shows the best ones.
+  subgraph build["Build time, on the author's computer"]
+    A["content/*.md"] --> B["build_index.py"] --> C["public/embeddings.json"]
+  end
+  subgraph browser["In your browser: your query never leaves your device"]
+    D["Load and check the index"] --> E["Embed your query<br/>Transformers.js, ONNX"] --> F["Rank the passages<br/>Python, dot product"] --> G["Show the best passages"]
+  end
+  C --> D
+```
+
 The query does not leave the browser. No inference service gets the query or a text.
 
 The browser downloads the runtime, the Python packages, and the model files from these hosts:

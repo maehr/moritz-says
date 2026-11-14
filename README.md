@@ -20,13 +20,37 @@ Do not add confidential or access-restricted text.
 4. `app.py` is a marimo notebook. marimo exports it as a WebAssembly page.
 5. The page loads the index and validates it.
 6. A pinned ONNX model calculates the query embedding in the browser.
-7. Python ranks the passages by dot product and shows the best five.
+7. Python ranks the passages by dot product and shows the best passages, grouped by work.
+
+```mermaid
+flowchart TB
+  accTitle: How the search works
+  accDescr: At build time, a script turns the texts into passages with embeddings. In the browser, the page loads them, embeds your query, ranks the passages, and shows the best ones.
+  subgraph build["Build time, on the author's computer"]
+    A["content/*.md"] --> B["build_index.py"] --> C["public/embeddings.json"]
+  end
+  subgraph browser["In your browser: your query never leaves your device"]
+    D["Load and check the index"] --> E["Embed your query<br/>Transformers.js, ONNX"] --> F["Rank the passages<br/>Python, dot product"] --> G["Show the best passages"]
+  end
+  C --> D
+```
 
 The query does not leave the browser. No inference service gets the query or a text.
 
 The browser downloads the runtime, the Python packages, and the model files from these hosts:
 `cdn.jsdelivr.net`, `files.pythonhosted.org`, `pypi.org`, `wasm.marimo.app`, and `huggingface.co` with its file hosts.
 The first visit needs a network connection. The first search downloads a model of about 120 MB.
+
+## Pages
+
+The page has four views. The header links to each view.
+
+| View | URL | Content |
+| --- | --- | --- |
+| Search | `#/` | The search field and the results. |
+| Works | `#/works` | The works in the index, with links. |
+| How it works | `#/how-it-works` | The explanation and the diagram. |
+| About | `#/about` | The author. |
 
 ## Models
 
@@ -82,7 +106,7 @@ uv run marimo check app.py --select MW
 ## Local check
 
 ```bash
-uv run marimo export html-wasm app.py -o dist --mode run
+uv run python -m scripts.export_site
 python -m http.server --directory dist 8000
 ```
 
@@ -95,7 +119,7 @@ They need the export in `dist/` and a network connection. CI does not run them.
 Run them before each release:
 
 ```bash
-uv run marimo export html-wasm app.py -o dist --mode run
+uv run python -m scripts.export_site
 uv run playwright install chromium firefox
 uv run pytest -m browser --no-cov
 ```

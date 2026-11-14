@@ -38,10 +38,13 @@ jobs:
 
       - name: Export
         run: |
-          uv run marimo export html-wasm app.py -o dist --mode run
+          uv run python -m scripts.export_site
           rm -f dist/CLAUDE.md
           test -s dist/index.html
+          test "$(grep -c '<meta name="description"' dist/index.html)" = 1
+          test "$(grep -c '<link rel="canonical" href="https://maehr.github.io/moritz-says/">' dist/index.html)" = 1
           test -s dist/public/embeddings.json
+          test -s dist/public/fonts/ibm-plex-sans-latin-wght-normal.woff2
           test -d dist/assets
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

@@ -16,7 +16,7 @@ Publish a search page that retrieves relevant passages by meaning rather than on
 - A manually curated collection of Markdown or plain-text documents.
 - Up to approximately 500 searchable passages in MVP; linear ranking, no vector database.
 - Static document passages and precomputed embeddings committed as a versioned JSON asset.
-- One query field, submit action, top five passage results, source title, excerpt, and optional source link.
+- One query field, submit action, results grouped by work (up to five works with up to five passages each), source title, excerpt, and optional source link.
 - GitHub Actions validation and automatic publication from `main`.
 
 **Out of scope**
@@ -56,9 +56,13 @@ The only ongoing host is GitHub Pages. External hosting may supply the marimo/Py
 ├── AGENTS.md                         # Copy the supplied Python stack specification
 ├── CLAUDE.md                         # Contains only: @AGENTS.md
 ├── app.py                            # marimo UI and ranking
+├── site.css                          # Page styles
+├── head.html                         # Page metadata
 ├── content/                          # Markdown/plain-text sources
 ├── public/
-│   └── embeddings.json              # Generated, checked-in search index
+│   ├── embeddings.json              # Generated, checked-in search index
+│   ├── fonts/                       # Self-hosted fonts
+│   └── img/                         # Self-hosted images
 ├── scripts/
 │   └── build_index.py               # Offline chunking and embedding
 ├── tests/
@@ -133,8 +137,10 @@ Document changes require re-running the index generator and committing the updat
 5. Embed the query with `pooling: 'mean'` and `normalize: true`.
 6. Convert the resulting typed vector to a Python sequence through a tested Pyodide/JavaScript bridge. Do not assume an arbitrary CDN import or `js.eval` example works without a browser integration test.
 7. Compute `score = sum(query[i] * chunk.embedding[i])` for every passage; because vectors are normalized, this is cosine similarity.
-8. Sort by descending score, breaking ties by chunk ID; display at most five results.
+8. Sort by descending score, breaking ties by chunk ID. Group the passages by work. Show the work of the best passage first, at most five works, and at most five passages for each work.
 9. Render source titles and text safely as plain text, and provide clickable source URLs when present. Label similarity as a ranking score, not a probability.
+
+**Pages.** The page uses hash routes with a navigation menu in the header. `#/` (and an empty hash) shows the title, the search field, and the results. `#/works` lists the searchable works. `#/how-it-works` explains the search with a diagram. `#/about` introduces the author. The results stay when the visitor changes the page.
 
 **Edge cases:** Blank or whitespace-only queries do not invoke the model. A missing/empty index shows a message. If model download or inference fails, show an error with a retry option. Repeated searches reuse the model instance. Disable duplicate submissions while a query runs.
 
@@ -157,7 +163,7 @@ Test using `http://localhost:8000/`, never by opening `dist/index.html` with `fi
 - Run checks and export on pull requests and pushes to `main`; allow optional manual dispatch. Deploy only on `main`.
 - Use pinned actions (full commit SHAs), pinned Python dependencies via `uv.lock`, and the configured runtime version.
 - Run the repository validation gate and `marimo check --select MW`.
-- Export using `marimo export html-wasm app.py -o dist --mode run`.
+- Export with `uv run python -m scripts.export_site`. It runs `marimo export html-wasm` and removes the default description.
 - Ensure `dist/index.html`, `dist/public/embeddings.json`, and required marimo assets exist; place `.nojekyll` in `dist/` if needed.
 - Upload `dist/` with `actions/upload-pages-artifact`; deploy via `actions/deploy-pages` in a dependent job.
 - Set `contents: read` globally; grant `pages: write` and `id-token: write` to the deployment job only. Use the `github-pages` environment.
@@ -179,7 +185,7 @@ All application asset references must work under `https://OWNER.github.io/REPO/`
 
 - **A1 Static:** After deployment, the public Pages URL works with no custom backend; browser network inspection shows no request to an embedding inference endpoint.
 - **A2 Deployment:** Direct navigation and page reload work at the `/REPO/` URL, including loading `public/embeddings.json`.
-- **A3 Search:** A reference semantic query (different wording from the target passage) retrieves the expected passage within top three.
+- **A3 Search:** A reference semantic query (different wording from the target passage) ranks the expected passage within the top three passages. The page shows it in the results.
 - **A4 Compatibility:** For fixture sentences, Python and browser embeddings both have 384 dimensions, near-unit norm, and cosine similarity at least 0.98 to each other. A mismatch blocks release.
 - **A5 Ranking:** Equal normalized vectors score approximately 1; a fixed test set ranks deterministically; no vector database is used.
 - **A6 Failure states:** Empty query, missing/invalid JSON, failed model download, and empty result set all produce usable UI states without uncaught exceptions.

@@ -1,7 +1,12 @@
 import marimo
 
 __generated_with = "0.25.2"
-app = marimo.App(width="medium", app_title="Moritz says")
+app = marimo.App(
+    width="medium",
+    app_title="Moritz says",
+    css_file="site.css",
+    html_head_file="head.html",
+)
 
 with app.setup:
     import html
@@ -221,12 +226,12 @@ def render_results(results: Sequence[tuple[Chunk, float]]) -> str:
 
     >>> chunk = Chunk(id="a", title="<A>", text="x & y", source="a.md", embedding=[1.0])
     >>> render_results([(chunk, 0.5)])
-    '<ol><li><strong>&lt;A&gt;</strong><br><small>Ranking score 0.500</small><p>x &amp; y</p></li></ol>'
+    '<ol class="results"><li><h2>&lt;A&gt;</h2><small>Ranking score 0.500</small><p>x &amp; y</p></li></ol>'
     >>> render_results([])
-    '<p>No passage found.</p>'
+    '<p role="status">No passage found.</p>'
     """
     if not results:
-        return "<p>No passage found.</p>"
+        return '<p role="status">No passage found.</p>'
     items: list[str] = []
     for chunk, value in results:
         link = ""
@@ -234,16 +239,33 @@ def render_results(results: Sequence[tuple[Chunk, float]]) -> str:
             href = html.escape(chunk.url, quote=True)
             link = f' · <a href="{href}" target="_blank" rel="noopener noreferrer">Source</a>'
         items.append(
-            f"<li><strong>{html.escape(chunk.title)}</strong>"
-            f"<br><small>Ranking score {value:.3f}{link}</small>"
+            f"<li><h2>{html.escape(chunk.title)}</h2>"
+            f"<small>Ranking score {value:.3f}{link}</small>"
             f"<p>{html.escape(chunk.text)}</p></li>"
         )
-    return f"<ol>{''.join(items)}</ol>"
+    return f'<ol class="results">{"".join(items)}</ol>'
+
+
+@app.cell
+def _():
+    mo.Html("""
+    <header class="site-header">
+    <a class="wordmark" href="https://moritzmaehr.ch/">Moritz Mähr</a>
+    <nav aria-label="Main navigation">
+    <a href="https://moritzmaehr.ch/research/">Research</a>
+    <a href="https://moritzmaehr.ch/build/">Build</a>
+    <a href="https://moritzmaehr.ch/academic/">CV &amp; Publications</a>
+    </nav>
+    </header>
+    """)
+    return
 
 
 @app.cell
 def _():
     mo.md("""
+    <p class="eyebrow">History of computing · Digital history</p>
+
     # Moritz says
 
     Search the publications of Moritz Mähr by meaning. Write a question or a topic in German or English.
@@ -369,6 +391,20 @@ async def _(form, index, retry, session):
             ]
         )
     _output
+    return
+
+
+@app.cell
+def _():
+    mo.Html("""
+    <footer class="site-footer">
+    <a href="https://moritzmaehr.ch/">Moritz Mähr</a>
+    <a href="https://moritzmaehr.ch/academic/">CV &amp; Publications</a>
+    <a href="https://orcid.org/0000-0002-1367-1618">ORCID</a>
+    <a href="https://github.com/maehr">GitHub</a>
+    <a href="https://github.com/maehr/moritz-says">Source code</a>
+    </footer>
+    """)
     return
 
 

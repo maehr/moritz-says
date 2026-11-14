@@ -2,7 +2,7 @@
 
 These tests need the export in ``dist/``, the Playwright browsers, and network access::
 
-    uv run marimo export html-wasm app.py -o dist --mode run
+    uv run python -m scripts.export_site
     uv run playwright install chromium firefox
     uv run pytest -m browser --no-cov
 """

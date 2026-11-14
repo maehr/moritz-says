@@ -56,9 +56,13 @@ The only ongoing host is GitHub Pages. External hosting may supply the marimo/Py
 ├── AGENTS.md                         # Copy the supplied Python stack specification
 ├── CLAUDE.md                         # Contains only: @AGENTS.md
 ├── app.py                            # marimo UI and ranking
+├── site.css                          # Page styles
+├── head.html                         # Page metadata
 ├── content/                          # Markdown/plain-text sources
 ├── public/
-│   └── embeddings.json              # Generated, checked-in search index
+│   ├── embeddings.json              # Generated, checked-in search index
+│   ├── fonts/                       # Self-hosted fonts
+│   └── img/                         # Self-hosted images
 ├── scripts/
 │   └── build_index.py               # Offline chunking and embedding
 ├── tests/
@@ -157,7 +161,7 @@ Test using `http://localhost:8000/`, never by opening `dist/index.html` with `fi
 - Run checks and export on pull requests and pushes to `main`; allow optional manual dispatch. Deploy only on `main`.
 - Use pinned actions (full commit SHAs), pinned Python dependencies via `uv.lock`, and the configured runtime version.
 - Run the repository validation gate and `marimo check --select MW`.
-- Export using `marimo export html-wasm app.py -o dist --mode run`.
+- Export with `uv run python -m scripts.export_site`. It runs `marimo export html-wasm` and removes the default description.
 - Ensure `dist/index.html`, `dist/public/embeddings.json`, and required marimo assets exist; place `.nojekyll` in `dist/` if needed.
 - Upload `dist/` with `actions/upload-pages-artifact`; deploy via `actions/deploy-pages` in a dependent job.
 - Set `contents: read` globally; grant `pages: write` and `id-token: write` to the deployment job only. Use the `github-pages` environment.

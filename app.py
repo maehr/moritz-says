@@ -13,6 +13,7 @@ with app.setup:
     import math
     import sys
     from collections.abc import Sequence
+    from dataclasses import dataclass
     from pathlib import Path
     from typing import Any, Literal
     from urllib.parse import urlsplit
@@ -33,7 +34,8 @@ with app.setup:
     QUERY_DTYPE = "q8"
 
     INDEX_PATH = ("public", "embeddings.json")
-    TOP_K = 5
+    TOP_WORKS = 5
+    PASSAGES_PER_WORK = 5
     NORM_TOLERANCE = 0.01
     APPROVED_URL_HOSTS = frozenset({"doi.org"})
     IS_WASM = sys.platform == "emscripten"
@@ -229,9 +231,9 @@ def load_index(raw: str) -> SearchIndex:
 
 @app.function
 def rank(
-    query: Sequence[float], chunks: Sequence[Chunk], top_k: int = TOP_K
+    query: Sequence[float], chunks: Sequence[Chunk], top_k: int | None = None
 ) -> list[tuple[Chunk, float]]:
-    """Return the best chunks by dot product. Break a tie by chunk ID.
+    """Return the chunks by dot product, best first. Break a tie by chunk ID. Keep ``top_k``, if set.
 
     The vectors have unit length, so the dot product is the cosine similarity.
 
@@ -239,36 +241,88 @@ def rank(
     >>> b = Chunk(id="b", title="B", text="y", source="b.md", embedding=[0.0, 1.0])
     >>> [(chunk.id, value) for chunk, value in rank([0.0, 1.0], [a, b])]
     [('b', 1.0), ('a', 0.0)]
+    >>> [chunk.id for chunk, _ in rank([0.0, 1.0], [a, b], top_k=1)]
+    ['b']
     """
     scored = [(chunk, math.sumprod(query, chunk.embedding)) for chunk in chunks]
     scored.sort(key=lambda pair: (-pair[1], pair[0].id))
     return scored[:top_k]
 
 
+@app.class_definition
+@dataclass(frozen=True)
+class WorkResult:
+    """The best passages of one work, best first.
+
+    >>> WorkResult(title="A", url=None, hits=()).title
+    'A'
+    """
+
+    title: str
+    url: str | None
+    hits: tuple[tuple[Chunk, float], ...]
+
+
 @app.function
-def render_results(results: Sequence[tuple[Chunk, float]]) -> str:
-    """Render ranked passages as HTML. Escape every value that comes from the index.
+def group_by_work(
+    ranked: Sequence[tuple[Chunk, float]],
+    top_works: int = TOP_WORKS,
+    per_work: int = PASSAGES_PER_WORK,
+) -> list[WorkResult]:
+    """Group ranked passages by work. The work of the best passage comes first.
+
+    >>> a1 = Chunk(id="a:1", title="A", text="x", source="a.md", embedding=[1.0])
+    >>> a2 = Chunk(id="a:2", title="A", text="y", source="a.md", embedding=[1.0])
+    >>> b1 = Chunk(id="b:1", title="B", text="z", source="b.md", embedding=[1.0])
+    >>> [(w.title, [c.id for c, _ in w.hits]) for w in group_by_work([(b1, 0.9), (a1, 0.8), (a2, 0.7)])]
+    [('B', ['b:1']), ('A', ['a:1', 'a:2'])]
+    >>> [w.title for w in group_by_work([(b1, 0.9), (a1, 0.8)], top_works=1)]
+    ['B']
+    >>> [len(w.hits) for w in group_by_work([(a1, 0.9), (a2, 0.8)], per_work=1)]
+    [1]
+    """
+    groups: dict[str, list[tuple[Chunk, float]]] = {}
+    for chunk, value in ranked:
+        hits = groups.get(chunk.source)
+        if hits is None:
+            if len(groups) >= top_works:
+                continue
+            hits = groups[chunk.source] = []
+        if len(hits) < per_work:
+            hits.append((chunk, value))
+    return [
+        WorkResult(title=hits[0][0].title, url=hits[0][0].url, hits=tuple(hits))
+        for hits in groups.values()
+    ]
+
+
+@app.function
+def render_results(results: Sequence[WorkResult]) -> str:
+    """Render the works with their passages as HTML. Escape every value that comes from the index.
 
     >>> chunk = Chunk(id="a", title="<A>", text="x & y", source="a.md", embedding=[1.0])
-    >>> render_results([(chunk, 0.5)])
-    '<ol class="results"><li><h2>&lt;A&gt;</h2><small>Ranking score 0.500</small><p>x &amp; y</p></li></ol>'
+    >>> render_results([WorkResult(title=chunk.title, url=None, hits=((chunk, 0.5),))])
+    '<section class="work"><h2>&lt;A&gt;</h2><ol class="results"><li><small>Ranking score 0.500</small><p>x &amp; y</p></li></ol></section>'
     >>> render_results([])
     '<p role="status">No passage found.</p>'
     """
     if not results:
         return '<p role="status">No passage found.</p>'
-    items: list[str] = []
-    for chunk, value in results:
+    sections: list[str] = []
+    for work in results:
         link = ""
-        if chunk.url is not None:
-            href = html.escape(chunk.url, quote=True)
-            link = f' · <a href="{href}" target="_blank" rel="noopener noreferrer">Source</a>'
-        items.append(
-            f"<li><h2>{html.escape(chunk.title)}</h2>"
-            f"<small>Ranking score {value:.3f}{link}</small>"
-            f"<p>{html.escape(chunk.text)}</p></li>"
+        if work.url is not None:
+            href = html.escape(work.url, quote=True)
+            link = f'<p><a href="{href}" target="_blank" rel="noopener noreferrer">Source</a></p>'
+        items = "".join(
+            f"<li><small>Ranking score {value:.3f}</small><p>{html.escape(chunk.text)}</p></li>"
+            for chunk, value in work.hits
         )
-    return f'<ol class="results">{"".join(items)}</ol>'
+        sections.append(
+            f'<section class="work"><h2>{html.escape(work.title)}</h2>{link}'
+            f'<ol class="results">{items}</ol></section>'
+        )
+    return "".join(sections)
 
 
 @app.function
@@ -433,7 +487,7 @@ async def _(form, index, retry, session):
         with mo.status.spinner(title="Searching"):
             _vector = (await session["embed"](index.model.query_prefix + _query)).to_py()
             check_vector(_vector, index.model.dimensions)
-            _output = mo.Html(render_results(rank(_vector, index.chunks)))
+            _output = mo.Html(render_results(group_by_work(rank(_vector, index.chunks))))
     except Exception as _exc:
         _output = mo.vstack(
             [

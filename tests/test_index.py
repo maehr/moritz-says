@@ -7,11 +7,14 @@ import pytest
 
 from app import (
     NORM_TOLERANCE,
-    TOP_K,
+    PASSAGES_PER_WORK,
+    TOP_WORKS,
     Chunk,
     ModelInfo,
     SearchIndex,
+    WorkResult,
     check_vector,
+    group_by_work,
     is_safe_url,
     load_index,
     rank,
@@ -204,12 +207,39 @@ def test_rank_breaks_ties_by_chunk_id() -> None:
     assert [c.id for c, _ in rank([1.0, 0.0], chunks[::-1])] == ["a", "b", "c"]
 
 
-def test_rank_limits_the_result_count() -> None:
+def test_rank_returns_all_chunks_unless_limited() -> None:
     chunks = [make_chunk(f"id{n}", [1.0, 0.0]) for n in range(8)]
-    assert TOP_K == 5
-    assert len(rank([1.0, 0.0], chunks)) == TOP_K
+    assert len(rank([1.0, 0.0], chunks)) == 8
     assert [c.id for c, _ in rank([1.0, 0.0], chunks, top_k=2)] == ["id0", "id1"]
     assert len(rank([1.0, 0.0], chunks, top_k=20)) == 8
+
+
+def work_chunk(source: str, n: int) -> Chunk:
+    return Chunk(
+        id=f"{source}:{n}",
+        title=source.upper(),
+        text="x",
+        source=f"{source}.md",
+        embedding=[1.0, 0.0],
+    )
+
+
+def test_group_by_work_orders_works_by_their_best_passage() -> None:
+    ranked = [(work_chunk("b", 1), 0.9), (work_chunk("a", 1), 0.8), (work_chunk("b", 2), 0.7)]
+    grouped = group_by_work(ranked)
+    assert [work.title for work in grouped] == ["B", "A"]
+    assert [[c.id for c, _ in work.hits] for work in grouped] == [["b:1", "b:2"], ["a:1"]]
+
+
+def test_group_by_work_limits_works_and_passages() -> None:
+    assert (TOP_WORKS, PASSAGES_PER_WORK) == (5, 5)
+    ranked = [
+        (work_chunk(f"w{w}", n), 1.0 - 0.01 * (w * 10 + n)) for w in range(7) for n in range(8)
+    ]
+    grouped = group_by_work(ranked)
+    assert len(grouped) == TOP_WORKS
+    assert all(len(work.hits) == PASSAGES_PER_WORK for work in grouped)
+    assert group_by_work([]) == []
 
 
 def test_rank_edge_cases() -> None:
@@ -221,21 +251,33 @@ def test_rank_edge_cases() -> None:
 # Rendering
 
 
+def work_result(chunk: Chunk, score: float) -> WorkResult:
+    return WorkResult(title=chunk.title, url=chunk.url, hits=((chunk, score),))
+
+
 def test_render_results_escapes_values() -> None:
     chunk = Chunk(**chunk_data(title="<script>alert(1)</script>", text="<script> & </b>"))
-    output = render_results([(chunk, 0.5)])
+    output = render_results([work_result(chunk, 0.5)])
     assert "<script>" not in output
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in output
     assert "&lt;script&gt; &amp; &lt;/b&gt;" in output
 
 
 def test_render_results_links_only_when_url_is_set() -> None:
-    plain = render_results([(Chunk(**chunk_data()), 0.25)])
+    plain = render_results([work_result(Chunk(**chunk_data()), 0.25)])
     assert "<a " not in plain
     assert "Ranking score 0.250" in plain
-    linked = render_results([(Chunk(**chunk_data(url='p.html?a=1&b="2"')), 0.25)])
+    linked = render_results([work_result(Chunk(**chunk_data(url='p.html?a=1&b="2"')), 0.25)])
     assert 'href="p.html?a=1&amp;b=&quot;2&quot;"' in linked
     assert 'rel="noopener noreferrer"' in linked
+
+
+def test_render_results_shows_each_work_once() -> None:
+    first, second = work_chunk("a", 1), work_chunk("a", 2)
+    work = WorkResult(title="A", url=None, hits=((first, 0.9), (second, 0.8)))
+    output = render_results([work])
+    assert output.count("<h2>") == 1
+    assert output.count("<li>") == 2
 
 
 def test_render_results_without_results() -> None:

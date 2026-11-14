@@ -19,7 +19,14 @@ from urllib.parse import urlsplit
 import pytest
 from playwright.sync_api import BrowserContext, Page, Route, sync_playwright
 
-from app import EMBEDDER_JS, QUERY_DTYPE, TRANSFORMERS_JS_URL, load_index
+from app import (
+    EMBEDDER_JS,
+    PASSAGES_PER_WORK,
+    QUERY_DTYPE,
+    TOP_WORKS,
+    TRANSFORMERS_JS_URL,
+    load_index,
+)
 
 pytestmark = pytest.mark.browser
 
@@ -99,10 +106,11 @@ def test_search_end_to_end(context: BrowserContext, site: str) -> None:
     items = page.locator("ol.results li")
     items.first.wait_for(timeout=MODEL_TIMEOUT)
     texts = [" ".join(text.split()) for text in items.all_inner_texts()]
-    assert 1 <= len(texts) <= 5
+    assert 1 <= len(texts) <= TOP_WORKS * PASSAGES_PER_WORK
+    assert 1 <= page.locator("section.work").count() <= TOP_WORKS
     expected = next(chunk for chunk in INDEX.chunks if chunk.id == reference["expected_id"])
     start = " ".join(expected.text.split())[:80]
-    assert any(start in text for text in texts[:3]), texts[:3]
+    assert any(start in text for text in texts), texts
 
     assert not errors
     assert all(is_allowed(host) for host in hosts), sorted(hosts)

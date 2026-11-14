@@ -38,6 +38,31 @@ with app.setup:
     APPROVED_URL_HOSTS = frozenset({"doi.org"})
     IS_WASM = sys.platform == "emscripten"
 
+    DIAGRAM_THEME = {
+        "primaryColor": "#e9eee9",
+        "primaryBorderColor": "#385344",
+        "primaryTextColor": "#222222",
+        "lineColor": "#555555",
+        "clusterBkg": "#fcfcfa",
+        "clusterBorder": "#385344",
+        "fontFamily": "IBM Plex Sans, sans-serif",
+        "fontSize": "16px",
+    }
+
+    # Keep this diagram the same as the one in README.md.
+    DIAGRAM = """
+    flowchart TB
+      accTitle: How the search works
+      accDescr: At build time, a script turns the texts into passages with embeddings. In the browser, the page loads them, embeds your query, ranks the passages, and shows the best ones.
+      subgraph build["Build time, on the author's computer"]
+        A["content/*.md"] --> B["build_index.py"] --> C["public/embeddings.json"]
+      end
+      subgraph browser["In your browser: your query never leaves your device"]
+        D["Load and check the index"] --> E["Embed your query<br/>Transformers.js, ONNX"] --> F["Rank the passages<br/>Python, dot product"] --> G["Show the best passages"]
+      end
+      C --> D
+    """
+
     # The only JavaScript in the application: load the model, embed one text, return a plain array.
     # The text is an argument. The source below is a constant; no value is interpolated into it.
     EMBEDDER_JS = """
@@ -246,6 +271,39 @@ def render_results(results: Sequence[tuple[Chunk, float]]) -> str:
     return f'<ol class="results">{"".join(items)}</ol>'
 
 
+@app.function
+def render_corpus(index: SearchIndex) -> str:
+    """List each searchable work with its link and passage count. Escape every value.
+
+    >>> a = Chunk(id="a:1", title="Beta <1>", text="x", source="a.md", url="https://doi.org/1", embedding=[1.0])
+    >>> b = Chunk(id="a:2", title="Beta <1>", text="y", source="a.md", url="https://doi.org/1", embedding=[1.0])
+    >>> c = Chunk(id="c:1", title="Alpha", text="z", source="c.md", embedding=[1.0])
+    >>> model = ModelInfo(
+    ...     document_model="a", document_revision="1", query_model="b", query_revision="2", dimensions=1
+    ... )
+    >>> render_corpus(SearchIndex(schema_version=1, model=model, chunks=[a, b, c]))
+    '<ul class="works"><li>Alpha <small>1 passage</small></li><li><a href="https://doi.org/1" target="_blank" rel="noopener noreferrer">Beta &lt;1&gt;</a> <small>2 passages</small></li></ul>'
+    """
+    works: dict[str, list[Chunk]] = {}
+    for chunk in index.chunks:
+        works.setdefault(chunk.source, []).append(chunk)
+    items: list[tuple[str, str]] = []
+    for chunks in works.values():
+        first = chunks[0]
+        title = html.escape(first.title)
+        if first.url is not None:
+            href = html.escape(first.url, quote=True)
+            title = f'<a href="{href}" target="_blank" rel="noopener noreferrer">{title}</a>'
+        count = len(chunks)
+        items.append(
+            (
+                first.title.casefold(),
+                f"<li>{title} <small>{count} passage{'s' * (count != 1)}</small></li>",
+            )
+        )
+    return f'<ul class="works">{"".join(item for _, item in sorted(items))}</ul>'
+
+
 @app.cell
 def _():
     mo.Html("""
@@ -391,6 +449,78 @@ async def _(form, index, retry, session):
             ]
         )
     _output
+    return
+
+
+@app.cell
+def _():
+    mo.Html("""
+    <section class="about" aria-labelledby="about-heading">
+    <img class="portrait" src="public/img/portrait-560.webp"
+      srcset="public/img/portrait-280.webp 280w, public/img/portrait-560.webp 560w"
+      sizes="(max-width: 30em) 12rem, 15rem" width="560" height="560" alt="Portrait of Moritz Mähr">
+    <div>
+    <h2 id="about-heading">About me</h2>
+    <p>I am a historian of technology. I study how computers change institutions and everyday life,
+    especially in Swiss public administration and migration governance. I am a Research Associate in
+    Digital History at the <a href="https://www.hist.unibe.ch/">Department of History</a> of the
+    <a href="https://www.unibe.ch/index_eng.html">University of Bern</a> and an Information and Library
+    Science Specialist with
+    <a href="https://ethz.ch/staffnet/en/organisation/departments/eth-library/research-support-services/research-analytics-service.html">Research Analytics Services</a>
+    at <a href="https://ethz.ch/en.html">ETH Zurich</a>, where I also earned my doctorate.
+    I teach digital history and critical AI literacy, and I build open tools for working with
+    historical sources.</p>
+    <p>More at <a href="https://moritzmaehr.ch/">moritzmaehr.ch</a>, including my
+    <a href="https://moritzmaehr.ch/academic/">CV and publications</a>.</p>
+    </div>
+    </section>
+    """)
+    return
+
+
+@app.cell
+def _():
+    mo.vstack(
+        [
+            mo.md("""
+    ## How it works
+
+    This search finds passages. It does not write answers, and it does not check facts.
+    Read each passage in the original work before you rely on it.
+
+    1. A script splits each text into short passages and turns each passage into numbers, an embedding.
+       It runs once, on my computer. The result is a public file.
+    2. Your browser loads that file. It also loads a small language model of about 120 MB.
+       Only the first search downloads the model.
+    3. The model turns your query into an embedding. This happens on your device. Your query is not sent anywhere.
+    4. Python compares your embedding with each passage. The best matches come first.
+       The score is a ranking score, not a probability.
+            """),
+            mo.mermaid(DIAGRAM, theme="base", theme_variables=DIAGRAM_THEME),
+            mo.md("""
+    **Text version of the diagram.** At build time, `build_index.py` reads `content/*.md` and writes
+    `public/embeddings.json`. In your browser, the page loads and checks that file, embeds your query with
+    Transformers.js, ranks the passages in Python by dot product, and shows the best passages.
+
+    The software is open source under AGPL-3.0-only. The code is on
+    [GitHub](https://github.com/maehr/moritz-says). All texts and embeddings are public.
+            """),
+        ]
+    )
+    return
+
+
+@app.cell
+def _(index):
+    mo.stop(index is None or not index.chunks)
+    mo.vstack(
+        [
+            mo.md(
+                "## What you can search\n\nThese works are in the index. The links lead to the originals."
+            ),
+            mo.Html(render_corpus(index)),
+        ]
+    )
     return
 
 

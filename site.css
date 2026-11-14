@@ -219,16 +219,29 @@ button[data-testid="marimo-plugin-form-submit-button"]:hover:not(:disabled) {
   padding: 0;
   margin: 1.5rem 0;
 }
-.results li {
+.work {
+  margin-top: 2rem;
+  padding-top: 1rem;
   border-top: 2px solid var(--ink);
-  padding: 1.25rem 0;
   overflow-wrap: anywhere;
 }
-.results h2 {
+.work h2 {
   margin: 0 0 0.25rem;
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+.work > p {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 0.9375rem;
+}
+.results li {
+  border-top: 1px solid var(--line);
+  padding: 1rem 0;
+}
+.results li:first-child {
+  border-top: 0;
 }
 .results small {
   font-family: var(--sans);

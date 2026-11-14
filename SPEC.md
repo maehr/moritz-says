@@ -16,7 +16,7 @@ Publish a search page that retrieves relevant passages by meaning rather than on
 - A manually curated collection of Markdown or plain-text documents.
 - Up to approximately 500 searchable passages in MVP; linear ranking, no vector database.
 - Static document passages and precomputed embeddings committed as a versioned JSON asset.
-- One query field, submit action, top five passage results, source title, excerpt, and optional source link.
+- One query field, submit action, results grouped by work (up to five works with up to five passages each), source title, excerpt, and optional source link.
 - GitHub Actions validation and automatic publication from `main`.
 
 **Out of scope**
@@ -137,7 +137,7 @@ Document changes require re-running the index generator and committing the updat
 5. Embed the query with `pooling: 'mean'` and `normalize: true`.
 6. Convert the resulting typed vector to a Python sequence through a tested Pyodide/JavaScript bridge. Do not assume an arbitrary CDN import or `js.eval` example works without a browser integration test.
 7. Compute `score = sum(query[i] * chunk.embedding[i])` for every passage; because vectors are normalized, this is cosine similarity.
-8. Sort by descending score, breaking ties by chunk ID; display at most five results.
+8. Sort by descending score, breaking ties by chunk ID. Group the passages by work. Show the work of the best passage first, at most five works, and at most five passages for each work.
 9. Render source titles and text safely as plain text, and provide clickable source URLs when present. Label similarity as a ranking score, not a probability.
 
 **Edge cases:** Blank or whitespace-only queries do not invoke the model. A missing/empty index shows a message. If model download or inference fails, show an error with a retry option. Repeated searches reuse the model instance. Disable duplicate submissions while a query runs.
@@ -183,7 +183,7 @@ All application asset references must work under `https://OWNER.github.io/REPO/`
 
 - **A1 Static:** After deployment, the public Pages URL works with no custom backend; browser network inspection shows no request to an embedding inference endpoint.
 - **A2 Deployment:** Direct navigation and page reload work at the `/REPO/` URL, including loading `public/embeddings.json`.
-- **A3 Search:** A reference semantic query (different wording from the target passage) retrieves the expected passage within top three.
+- **A3 Search:** A reference semantic query (different wording from the target passage) ranks the expected passage within the top three passages. The page shows it in the results.
 - **A4 Compatibility:** For fixture sentences, Python and browser embeddings both have 384 dimensions, near-unit norm, and cosine similarity at least 0.98 to each other. A mismatch blocks release.
 - **A5 Ranking:** Equal normalized vectors score approximately 1; a fixed test set ranks deterministically; no vector database is used.
 - **A6 Failure states:** Empty query, missing/invalid JSON, failed model download, and empty result set all produce usable UI states without uncaught exceptions.

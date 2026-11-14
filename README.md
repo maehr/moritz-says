@@ -20,7 +20,7 @@ Do not add confidential or access-restricted text.
 4. `app.py` is a marimo notebook. marimo exports it as a WebAssembly page.
 5. The page loads the index and validates it.
 6. A pinned ONNX model calculates the query embedding in the browser.
-7. Python ranks the passages by dot product and shows the best five.
+7. Python ranks the passages by dot product and shows the best passages, grouped by work.
 
 ```mermaid
 flowchart TB
